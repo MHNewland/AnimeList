@@ -57,7 +57,7 @@ def main():
                         titles.append(title.text_content())
                 anime_dict[year][season] = titles
         df = pd.DataFrame.from_dict(anime_dict)
-        df.to_json("test.json")
+        df.to_json("AniChart.json")
  
 if __name__ == '__main__':
     main()

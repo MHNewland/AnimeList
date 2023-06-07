@@ -17,23 +17,6 @@ def main():
         href = [tag.get_attribute('href') for tag in temp_tag_list]
         anime_dict = {}
 
-#region test 1 page
-
-        # for x in range (1):
-        #     link = href[0]
-        #     x=1
-             
-        #     while True:
-        #         try:
-        #             page.goto(f"{base_page}{link}?page=1")
-        #             page.wait_for_load_state(timeout=3000)
-        #             break
-        #         except TE:
-        #             continue
-
-#endregion
-
-#region full loop test
 
         for link in href:
             x=1
@@ -45,8 +28,6 @@ def main():
                 except TE:
                     continue
             
-#endregion
-
                 if page.query_selector('.error404') != None:
                     break
                 else:
