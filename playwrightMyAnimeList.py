@@ -1,9 +1,9 @@
 from playwright.sync_api import sync_playwright
 from playwright._impl._api_types import TimeoutError as TE
-import pandas as pd
-import re
+import json
 
 def main():
+    anime_list= []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
@@ -40,19 +40,22 @@ def main():
                         genres = card.query_selector_all('.genre')
                         genre_list = [genre.text_content().strip() for genre in genres]
                         properties = card.query_selector_all('.property')
-                        anime_dict[title] = {"subtitle": subtitle,
-                                            "genres": genre_list}
+                        anime_dict = {"title" : title,
+                                      "subtitle": subtitle,
+                                      "genres": genre_list}
 
                         for prop in properties:
                             property_name = prop.query_selector('.caption').text_content()
                             if property_name == "Theme" or property_name == "Studio" or property_name == "Demographic":
                                 property_name += "s"
-                            anime_dict[title].update({property_name:
+                            anime_dict.update({property_name.lower():
                                                     [item.text_content() for item in prop.query_selector_all('.item')]})
+                        anime_list.append(anime_dict.copy())
                     x+=1
-            
+ 
+        with open("MyAnimeList.json", "w") as mal:
+            json.dump(anime_list, mal)
                      
-        df = pd.DataFrame.from_dict(anime_dict)
-        df.to_json("MyAnimeList.json")
+
 
 main()

@@ -1,5 +1,4 @@
 from typing import Optional
-from typing import List
 import sqlalchemy as sa
 import sqlalchemy.orm as sao
 import json
@@ -24,6 +23,7 @@ class AniChart(Base):
     year: sao.Mapped[int] =sao.mapped_column(sa.SmallInteger())
     season: sao.Mapped[str] =sao.mapped_column(sa.String(6))
     title: sao.Mapped[str] =sao.mapped_column(sa.String(50), sa.ForeignKey("MyAnimeList.title"))
+    #MyAnimeList: sao.Mapped["MyAnimeList"] = sao.relationship(back_populates="title")
 
     def __repr__(self) -> str:
         return f"AniChart(id={self.id!r}, year={self.year!r}, season={self.season}, title={self.title})"
@@ -44,13 +44,14 @@ class MyAnimeList(Base):
     __tablename__ = "MyAnimeList"
 
     id: sao.Mapped[int] =sao.mapped_column(primary_key=True)
-    title: sao.Mapped[str] =sao.mapped_column(sa.String(50), sa.ForeignKey("AniChart.title"))
+    title: sao.Mapped[str] =sao.mapped_column(sa.String(50))
     subtitle: sao.Mapped[Optional[str]]
     genres: sao.Mapped[Optional[str]] =sao.mapped_column(sa.String(15))
     studios: sao.Mapped[str] =sao.mapped_column(sa.String(30))
     source: sao.Mapped[str] =sao.mapped_column(sa.String(10))
     themes: sao.Mapped[Optional[str]] = sao.mapped_column(sa.String(15))
     demographics: sao.Mapped[str] = sao.mapped_column(sa.String(15))
+    #AniChart: sao.Mapped["AniChart"] = sao.relationship(back_populates="title")
 
     def __repr__(self) -> str:
         returnstr = (
@@ -58,119 +59,70 @@ class MyAnimeList(Base):
             f"title={self.title}, " \
             f"subtitle={self.subtitle}, " \
             f"genres={self.genres}, " \
-            f"Studios={self.studios}, " \
-            f"Source={self.source}, " \
-            f"Themes={self.themes}, " \
-            f"Demographics={self.demographics})"
+            f"studios={self.studios}, " \
+            f"source={self.source}, " \
+            f"themes={self.themes}, " \
+            f"demographics={self.demographics})"
             )
         return returnstr
 
 
-def iter_dict(dictionary:dict, prev_key="", dict_line=[]):
-    #look at each item
-    #if the value is a dictionary, call again
-    #else, for each value, add "key : value"
-    #return the list
-
-    # the way I want it to look like
-    # dict1{
-    #   sub_dict1: strVal,        
-    #   sub_dict2:[strVal1, strVal2]
-    # }
-    #
-    # should add
-    # "dict1 : sub_dict1 : strVal"
-    # "dict1 : sub_dict2 : strVal1"
-    # "dict1 : sub_dict2 : strVal2"
-    for key, val in dictionary.items():
-        if type(val)==dict:
-            iter_dict(val, f"{prev_key}{key} -- ",dict_line)
-        else:
-            if type(val)==type(None):
-                val=[None]
-            if type(val)==str:
-                val=[val]
-            for v in val:
-                dict_line.append(f"{prev_key}{key} -- {v}")
-    return dict_line
-
-
 def main():
-    engine = sa.create_engine("sqlite://",echo=False)
-
+    engine = sa.create_engine("sqlite://", echo=False)
     Base.metadata.create_all(engine)
-
     with sao.Session(engine) as session:
-        
-        with open("./AniChart.json") as acjson:
-            ac = json.load(acjson)
-            session.add_all(add_all_items(ac, "AniChart"))
-        
+        anime_items = []
+        with open("MyAnimeList.json") as mal:
+            for mal_anime in json.load(mal):
+                mal_obj = MyAnimeList()
+                mal_list = [mal_obj]
 
-        with open("./MyAnimeList.json") as maljson:
-            mal = json.load(maljson)
-            session.add_all(add_all_items(mal, "MyAnimeList"))
+                # for each key value pair for the anime
+                # if the first item doesn't have a value set for that key
+                # add that value for all items in the list
+                # if it does have a value
+                # create a copy of the object, change the value to the new value and add it to the list of
+                for key, value in mal_anime.items():
+                    if type(value) != list:
+                        value = [value]
+                    for val in value:
+                        if ((mal_list[0].__getattribute__(key)) == None):
+                            for obj in mal_list:
+                                obj.__setattr__(key,val)
+                        else:
+                            temp = deepcopy(obj)
+                            temp.__setattr__(key,val)
+                            mal_list.append(temp)
 
+                # after going through each key value pair for an anime
+                # add all created objects to the items_to_add list
+                anime_items.extend(mal_list)
+
+            # add all objects from items_to_add
+            session.add_all(anime_items)
+
+        with open("AniChart.json", "r") as ac:
+            ac_list = []
+            for ac_anime in json.load(ac):
+                year, season, title = ac_anime.values()
+                ac_list.append(AniChart(year = year, season = season, title = title))
+            session.add_all(ac_list)
+
+        # commit to table
         session.commit()
 
     session = sao.Session(engine)
-    statement = sa.select(MyAnimeList).where(MyAnimeList.id<3)
-    for line in session.scalars(statement):
-        print(f"test: {line}")
+
+    ac_stmt = sa.select(AniChart.year, AniChart.title, MyAnimeList.genres). \
+                 join(AniChart, AniChart.title == MyAnimeList.title). \
+                 distinct(). \
+                 where(AniChart.year == 2008). \
+                 where(MyAnimeList.themes == "Isekai")
     
-    statement = sa.select(AniChart).where(AniChart.id<3)
-    for line in session.scalars(statement):
-        print(f"test: {line}")
+    result = session.execute(ac_stmt).all()
 
-
-def add_all_items(json, class_name):
-    items_to_add = []
-    prev_title = ""
-    class_dict = {
-        "MyAnimeList": MyAnimeList,
-        "AniChart": AniChart
-    }
-    obj = object
-    for line in iter_dict(json):
-        row, col, value = line.split(" -- ")
-        col=col.lower()
-        #print(f"{row}:{col}:{value}")
-
-        # if the title is the same
-        # check if that value exists for that title
-        # if it doesn't, 
-        #   set the value for every item in the list
-        # if the value already exists, 
-        #   create another item and set the attribute to the new value
-        #   add the new item to the list
-
-        if prev_title =="":
-            item=[]
-            obj = class_dict[class_name]()
-            root_attr = list(class_dict[class_name].__annotations__.keys())[1]
-            obj.__setattr__(root_attr, row)
-            obj.__setattr__(col,value)
-            item.append(obj)
-            prev_title=row
-        elif row == prev_title:
-            if ((item[0].__getattribute__(col)) == None):
-                for i in item:
-                    i.__setattr__(col,value)
-            else:
-                temp = deepcopy(i)
-                temp.__setattr__(col,value)
-                item.append(temp)
-        else:
-            for x in item:
-                items_to_add.append(x)
-            item=[]         
-            del obj
-            obj = class_dict[class_name]()
-            obj.__setattr__("title", row)
-            obj.__setattr__(col,value)
-            item.append(obj)  
-            prev_title=row
-    return items_to_add
+    for i in result:
+        print(i)
 
 
 main()

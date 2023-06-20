@@ -1,19 +1,41 @@
 from playwright.sync_api import sync_playwright
-import pandas as pd
+import json
 
 def main():
-
+    '''
+    {
+        {
+            "year": 2006,
+            "season": Spring,
+            "title": title1
+        }
+        {
+            "year": 2006,
+            "season": Spring,
+            "title": title2
+        }
+        ...
+        {
+            "year": 2008,
+            "season": Winter,
+            "title": title20
+        }
+    }
+    '''
     seasons=["Spring", "Summer", "Fall", "Winter"]
     years=[y for y in range(2006, 2023)]
+    list_of_anime = []
     anime_dict = {}
+    i = 0
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
         for year in years:
-            anime_dict[year] = {}
+            anime_dict["year"] = year
             for season in seasons:
-                anime_dict[year][season] = {}
+                anime_dict["season"] = season
+
 
                 while True:
                     page.goto(f'https://anichart.net/{season}-{str(year)}')
@@ -49,16 +71,17 @@ def main():
                         page.wait_for_timeout(500)
 
                 all_cards = page.query_selector_all('.media-card')
-                titles = []
                 for card in all_cards:
                     overlay = card.query_selector('.overlay')
                     if(overlay!=None):
                         title = overlay.query_selector('.title')
-                        titles.append(title.text_content())
-                anime_dict[year][season] = titles
-        df = pd.DataFrame.from_dict(anime_dict)
-        df.to_json("AniChart.json")
- 
+                        anime_dict["title"] = title.text_content()
+                        list_of_anime.append(anime_dict.copy())
+
+        with open("AniChart.json", "w") as ac:
+            json.dump(list_of_anime, ac)
+
+
 if __name__ == '__main__':
     main()
 
