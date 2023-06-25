@@ -115,8 +115,7 @@ def main():
 
     ac_stmt = sa.select(AniChart.year, AniChart.title, MyAnimeList.genres). \
                  join(AniChart, AniChart.title == MyAnimeList.title). \
-                 distinct(). \
-                 where(AniChart.year == 2008). \
+                 distinct(AniChart.title). \
                  where(MyAnimeList.themes == "Isekai")
     
     result = session.execute(ac_stmt).all()
