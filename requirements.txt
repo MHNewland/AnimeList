@@ -1,0 +1,4 @@
+pandas==1.5.2
+playwright==1.33.0
+plotly==5.15.0
+SQLAlchemy==2.0.4
