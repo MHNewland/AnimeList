@@ -27,7 +27,7 @@ class AniChart(Base):
     id: sao.Mapped[int] = sao.mapped_column(primary_key=True)
     year: sao.Mapped[int] =sao.mapped_column(sa.SmallInteger())
     season: sao.Mapped[str] =sao.mapped_column(sa.String(6))
-    title: sao.Mapped[str] =sao.mapped_column(sa.String(50), sa.ForeignKey("MyAnimeList.title"))
+    title: sao.Mapped[str] =sao.mapped_column(sa.String(150), sa.ForeignKey("MyAnimeList.title"))
     #MyAnimeList: sao.Mapped["MyAnimeList"] = sao.relationship(back_populates="title")
 
     def __repr__(self) -> str:
@@ -52,8 +52,8 @@ class MyAnimeList(Base):
     __tablename__ = "MyAnimeList"
 
     id: sao.Mapped[int] =sao.mapped_column(primary_key=True)
-    title: sao.Mapped[str] =sao.mapped_column(sa.String(50))
-    subtitle: sao.Mapped[Optional[str]]
+    title: sao.Mapped[str] =sao.mapped_column(sa.String(150))
+    subtitle: sao.Mapped[Optional[str]] =sao.mapped_column(sa.String(150))
     genres: sao.Mapped[Optional[str]] =sao.mapped_column(sa.String(15))
     studios: sao.Mapped[str] =sao.mapped_column(sa.String(30))
     source: sao.Mapped[str] =sao.mapped_column(sa.String(10))
@@ -75,9 +75,6 @@ class MyAnimeList(Base):
         return returnstr
 
 
-# def main():
-#     #session = create_database()
-#     print(read_data())
 
 def create_database():
     try:
@@ -140,25 +137,26 @@ def read_data(session = sao.Session(engine:=sa.create_engine("sqlite:///database
               start_year = 2006,
               end_year = 2024,
               seasons = [],
-              titles = [],
+              studios = [],
               genres = [],
-              subtitles = [],
               source = [],
               themes = [],
               demographics = []):
     
-    joined_tables = sa.select(AniChart.year,
-                         AniChart.season,
-                         MyAnimeList.title,
-                         MyAnimeList.subtitle,
-                         MyAnimeList.genres,
-                         MyAnimeList.studios,
-                         MyAnimeList.source,
-                         MyAnimeList.themes,
-                         MyAnimeList.demographics
-                         ) \
-                    .join(AniChart, AniChart.title == MyAnimeList.title)
-             
+    joined_tables = sa.select(
+                        AniChart.year,
+                        AniChart.season,
+                        MyAnimeList.title,
+                        MyAnimeList.subtitle,
+                        MyAnimeList.genres,
+                        MyAnimeList.studios,
+                        MyAnimeList.source,
+                        MyAnimeList.themes,
+                        MyAnimeList.demographics
+                        ) \
+                    .join(AniChart, AniChart.title == MyAnimeList.title) \
+                    .group_by(AniChart.year, AniChart.season, MyAnimeList.title)
+                 
 
     filtered_table = joined_tables.where(AniChart.year >= start_year) \
                                 .where(AniChart.year <= end_year)
@@ -166,26 +164,63 @@ def read_data(session = sao.Session(engine:=sa.create_engine("sqlite:///database
     if len(seasons) !=0:
         filtered_table = filtered_table.where(AniChart.season.in_(seasons))
     
-    if len(titles)!=0:
-        filtered_table = filtered_table.where(MyAnimeList.title.in_(titles))
-
-    if len(subtitles) !=0:
-        filtered_table = filtered_table.where(MyAnimeList.subtitle.in_(subtitles))
+    if len(studios) !=0:
+        filtered_table = filtered_table.where(MyAnimeList.studios.in_(studios))
     
     if len(genres) != 0:
-        filtered_table = filtered_table.where(MyAnimeList.genres.in_(genres))
+        if "None" in genres:
+            filtered_table = filtered_table.where(
+                sa.or_(
+                    MyAnimeList.genres.in_(genres), 
+                    MyAnimeList.genres ==None
+                )
+            )
+        else:
+            filtered_table = filtered_table.where(MyAnimeList.genres.in_(genres))
 
     if len(source) != 0:
-        filtered_table = filtered_table.where(MyAnimeList.source.in_(source))
+        if "None" in source:
+            filtered_table = filtered_table.where(
+                sa.or_(
+                    MyAnimeList.source.in_(source), 
+                    MyAnimeList.source ==None
+                )
+            )
+        else:
+            filtered_table = filtered_table.where(MyAnimeList.source.in_(source))
 
     if len(themes) != 0:
-        filtered_table = filtered_table.where(MyAnimeList.themes.in_(themes))
+        if "None" in themes:
+            filtered_table = filtered_table.where(
+                sa.or_(
+                    MyAnimeList.themes.in_(themes), 
+                    MyAnimeList.themes ==None
+                )
+            )
+        else:
+            filtered_table = filtered_table.where(MyAnimeList.themes.in_(themes))
 
     if len(demographics) != 0:
-        filtered_table = filtered_table.where(MyAnimeList.demographics.in_(demographics))
+        if "None" in demographics:
+            filtered_table = filtered_table.where(
+                sa.or_(
+                    MyAnimeList.demographics.in_(demographics), 
+                    MyAnimeList.demographics ==None
+                )
+            )
+        else:
+            filtered_table = filtered_table.where(MyAnimeList.demographics.in_(demographics))
 
-    df = pd.DataFrame(session.execute(filtered_table))
+    filtered_table = session.execute(filtered_table)
+
+    df = pd.DataFrame(filtered_table,dtype=object)
+    df.fillna("None", inplace=True)
+
     return df
 
+
+# def main():
+#     #session = create_database()
+#     print(read_data())
 
 # main()
