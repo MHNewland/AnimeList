@@ -3,7 +3,9 @@ import sqlalchemy as sa
 import sqlalchemy.orm as sao
 import json
 from copy import deepcopy
-import pandas as pd
+
+default_session = sao.Session(engine:=sa.create_engine('sqlite:///database.db', echo=False))
+
 #AniChart: year, season, title
 #MyAnimeList: title, subgenre, genres, studios, source, themes, demographics
 
@@ -15,41 +17,41 @@ class Base(sao.DeclarativeBase):
 AniChart json is formatted as 
 [
     {
-        "year": int,
-        "season": str,
-        "title": str
+        'year': int,
+        'season': str,
+        'title': str
     }
 ]
 '''
 class AniChart(Base):
-    __tablename__ = "AniChart"
+    __tablename__ = 'AniChart'
 
     id: sao.Mapped[int] = sao.mapped_column(primary_key=True)
     year: sao.Mapped[int] =sao.mapped_column(sa.SmallInteger())
     season: sao.Mapped[str] =sao.mapped_column(sa.String(6))
-    title: sao.Mapped[str] =sao.mapped_column(sa.String(150), sa.ForeignKey("MyAnimeList.title"))
-    #MyAnimeList: sao.Mapped["MyAnimeList"] = sao.relationship(back_populates="title")
+    title: sao.Mapped[str] =sao.mapped_column(sa.String(150), sa.ForeignKey('MyAnimeList.title'))
+    #MyAnimeList: sao.Mapped['MyAnimeList'] = sao.relationship(back_populates='title')
 
     def __repr__(self) -> str:
-        return f"AniChart(id={self.id!r}, year={self.year!r}, season={self.season}, title={self.title})"
+        return f'AniChart(id={self.id!r}, year={self.year!r}, season={self.season}, title={self.title})'
 
 
 '''
  MyAnimeList json is formatted as 
 [
     {
-        "title": "str",
-        "subtitle": str/null,
-        "genres": list[str]/null,
-        "studios": list[str]/null,
-        "source": list[str]/null,
-        "themes": list[str]/null,
-        "demographics": list[str]/null
+        'title': 'str',
+        'subtitle': str/null,
+        'genres': list[str]/null,
+        'studios': list[str]/null,
+        'source': list[str]/null,
+        'themes': list[str]/null,
+        'demographics': list[str]/null
     }
 ]
  '''   
 class MyAnimeList(Base):
-    __tablename__ = "MyAnimeList"
+    __tablename__ = 'MyAnimeList'
 
     id: sao.Mapped[int] =sao.mapped_column(primary_key=True)
     title: sao.Mapped[str] =sao.mapped_column(sa.String(150))
@@ -59,35 +61,34 @@ class MyAnimeList(Base):
     source: sao.Mapped[str] =sao.mapped_column(sa.String(10))
     themes: sao.Mapped[Optional[str]] = sao.mapped_column(sa.String(15))
     demographics: sao.Mapped[Optional[str]] = sao.mapped_column(sa.String(15))
-    #AniChart: sao.Mapped["AniChart"] = sao.relationship(back_populates="title")
+    #AniChart: sao.Mapped['AniChart'] = sao.relationship(back_populates='title')
 
     def __repr__(self) -> str:
         returnstr = (
-            f"MyAnimeList(id={self.id}, " \
-            f"title={self.title}, " \
-            f"subtitle={self.subtitle}, " \
-            f"genres={self.genres}, " \
-            f"studios={self.studios}, " \
-            f"source={self.source}, " \
-            f"themes={self.themes}, " \
-            f"demographics={self.demographics})"
+            f'MyAnimeList(id={self.id}, ' \
+            f'title={self.title}, ' \
+            f'subtitle={self.subtitle}, ' \
+            f'genres={self.genres}, ' \
+            f'studios={self.studios}, ' \
+            f'source={self.source}, ' \
+            f'themes={self.themes}, ' \
+            f'demographics={self.demographics})'
             )
         return returnstr
 
 
-
 def create_database():
     try:
-        engine = sa.create_engine("sqlite:///database.db", echo=False)
+        engine = sa.create_engine('sqlite:///database.db', echo=False)
     except Exception as e:
         print(e)
     Base.metadata.create_all(engine)
     with sao.Session(engine) as session:
         anime_items = []
-        with open("MyAnimeList.json") as mal:
+        with open('MyAnimeList.json') as mal:
             for mal_anime in json.load(mal):
                 if len(anime_items) > 0:
-                    if any(mal_anime["title"] == ai.__getattribute__("title") for ai in anime_items):
+                    if any(mal_anime['title'] == ai.__getattribute__('title') for ai in anime_items):
                         continue
 
                 mal_obj = MyAnimeList()
@@ -95,25 +96,106 @@ def create_database():
 
                 for key, value in mal_anime.items():
                     
-
                     #if value isn't a list, convert it into one to reduce code variance
                     if type(value) != list:
                         value = [value]
-                    # if nothing has been set for the initial item's key,
-                    # that means it has not been set for any of the items in the list,
-                    # add that value to all of the objects in the list.
-                    for val in value:
-                        if ((mal_list[0].__getattribute__(key)) == None):
-                            for obj in mal_list:
-                                obj.__setattr__(key,val)
-                        # if it has been set, 
-                        # make a copy of the object so we don't override the original, 
-                        # change the value of the new object to the new value
-                        # add it to te list
-                        else:
-                            temp = deepcopy(obj)
-                            temp.__setattr__(key,val)
-                            mal_list.append(temp)
+
+                    # figure out how many copies of each row we need to make to update all of
+                    # them with the values so that given
+                    # {key1: {
+                    #   sub_key1: {
+                    #       value1,
+                    #       value2                           
+                    #   }
+                    #   sub_key2: {
+                    #       value3,
+                    #       value4
+                    #   }
+                    #   sub_key3: {
+                    #       value5,
+                    #       value6,
+                    #       value7
+                    #   }
+                    # }
+                    #
+                    # produces
+                    #   key1    |   sub_key1    |
+                    #---------------------------|
+                    #   1       |   value1      | 
+                    #   1       |   value2      |
+                    #___________________________
+                    #
+                    #
+                    # since there are 2 values in sub_key2, 
+                    # get the length of the current list,
+                    # create 1 additional copy (num of values - 1)
+                    # then for the number of items in each set,
+                    # set the value of the new key.
+                    # since there are 2 values, it'd set the first 2 values to 'value3'
+                    # then the next 2 values to 'value4'
+                    #
+                    # for v in range(len of values)
+                    #   for l in range(len of list)
+                    #       mal_list[v*len of list+l] attribute = new value
+                    #   
+                    # l=1 -> value2
+                    # v=0 -> value3
+                    # mal_list[0*2+1] -> mal_list[1] -> value2  | value3
+                    #    
+                    #   key1    |   sub_key1    |   sub_key2    |  
+                    #-------------------------------------------|   l,v
+                    #   1       |   value1      |   value3      |   0,0 -> 0
+                    #   1       |   value2      |   value3      |   1,0 -> 1
+                    #   1       |   value1      |   value4      |   0,1 -> 2
+                    #   1       |   value2      |   value4      |   1,1 -> 3
+                    #___________________________________________
+                    #
+                    # since there are 3 values in sub_key3, 
+                    # get the length of the current list,
+                    # create 2 additional copies (num of values - 1)
+                    # then for the number of items in each set,
+                    # set the value of the new key.
+                    # since there are 3 values, it'd set the first 3 values to 'value5'
+                    # then the next 3 values to 'value6'
+                    # and the next 3 values to 'value7'
+                    # 
+                    # for v in range(len of values)
+                    #   for l in range(len of list)
+                    #       mal_list[v*len of list+l] attribute = new value
+                    #   
+                    # l=2 -> value1  |   value4
+                    # v=1 -> value6
+                    # mal_list[1*4+2] -> mal_list[6] -> value1  |   value4  |   value6
+                    #
+                    #
+                    #   key1    |   sub_key1    |   sub_key2    |   sub_key3    |
+                    #-----------------------------------------------------------|   l,v
+                    #   1       |   value1      |   value3      |   value5      |   0,0 -> 0
+                    #   1       |   value2      |   value3      |   value5      |   1,0 -> 1
+                    #   1       |   value1      |   value4      |   value5      |   2,0 -> 2
+                    #   1       |   value2      |   value4      |   value5      |   3,0 -> 3
+                    #   1       |   value1      |   value3      |   value6      |   0,1 -> 4
+                    #   1       |   value2      |   value3      |   value6      |   1,1 -> 5
+                    #   1       |   value1      |   value4      |   value6      |   2,1 -> 6
+                    #   1       |   value2      |   value4      |   value6      |   3,1 -> 7
+                    #   1       |   value1      |   value3      |   value7      |   0,2 -> 8
+                    #   1       |   value2      |   value3      |   value7      |   1,2 -> 9
+                    #   1       |   value1      |   value4      |   value7      |   2,2 -> 10
+                    #   1       |   value2      |   value4      |   value7      |   3,2 -> 11
+
+                    num_of_values = len(value)
+                    num_in_list = len(mal_list)
+                    temp_list= []
+                    for copies in range(num_of_values-1):
+                        temp = deepcopy(mal_list)
+                        temp_list.extend(temp)
+
+                    mal_list.extend(temp_list)
+
+                    for v in range(num_of_values):
+                      for l in range(num_in_list):
+                          mal_list[v*num_in_list+l].__setattr__(key,value[v])
+
 
                 # after going through each key value pair for an anime
                 # add all created objects to the items_to_add list
@@ -122,7 +204,7 @@ def create_database():
             # add all objects from items_to_add
             session.add_all(anime_items)
 
-        with open("AniChart.json", "r") as ac:
+        with open('AniChart.json', 'r') as ac:
             ac_list = []
             for ac_anime in json.load(ac):
                 year, season, title = ac_anime.values()
@@ -133,94 +215,159 @@ def create_database():
         session.commit()    
         return session
 
-def read_data(session = sao.Session(engine:=sa.create_engine("sqlite:///database.db", echo=False)),
-              start_year = 2006,
-              end_year = 2024,
-              seasons = [],
-              studios = [],
-              genres = [],
-              source = [],
-              themes = [],
-              demographics = []):
+
+def get_full_table(session = default_session):
+    with session:
+
+        for obj in session.scalars(sa.select(MyAnimeList)):
+            title = obj.title
+        
+            if (title[-9:].casefold() == 'nd season' or \
+                title[-9:].casefold() == 'rd season' or \
+                title[-9:].casefold() == 'th season') and \
+                title[-10].isnumeric():
+                
+                season_index = title.casefold().index('season')-3                                   
+                obj.title = title[:season_index]
+
+            if title[-9:-1].casefold() == 'season ' and title[-1].isnumeric():
+                season_index = title.casefold().index('season')
+                obj.title = title[:season_index] + title[season_index+6:]
+                
+               
+        #print('making full table')
+        joined_tables = sa.select(
+                            AniChart.year,
+                            AniChart.season,
+                            MyAnimeList.title,
+                            MyAnimeList.subtitle,
+                            MyAnimeList.genres,
+                            MyAnimeList.studios,
+                            MyAnimeList.source,
+                            MyAnimeList.themes,
+                            MyAnimeList.demographics
+                            ) \
+                        .join(target=AniChart, onclause=MyAnimeList.title == AniChart.title)
+    #print('returning full table')
+    return joined_tables, session
+
+
+def read_data(session = default_session,
+              group_by=[],
+              joined_tables=None):
     
-    joined_tables = sa.select(
-                        AniChart.year,
-                        AniChart.season,
-                        MyAnimeList.title,
-                        MyAnimeList.subtitle,
-                        MyAnimeList.genres,
-                        MyAnimeList.studios,
-                        MyAnimeList.source,
-                        MyAnimeList.themes,
-                        MyAnimeList.demographics
-                        ) \
-                    .join(AniChart, AniChart.title == MyAnimeList.title) \
-                    .group_by(AniChart.year, AniChart.season, MyAnimeList.title)
-                 
+    #print('reading data')
+    with session:
+        if joined_tables== None:
+            joined_tables, session = get_full_table(session=session)
 
-    filtered_table = joined_tables.where(AniChart.year >= start_year) \
-                                .where(AniChart.year <= end_year)
+        joined_tables = group_table(joined_tables, group_by)
+    #print('done reading data')
+    return joined_tables, session
+
+
+def filter_data(session= default_session,
+                joined_tables = None,
+                start_year = 2006,
+                end_year = 2024,
+                title = '',
+                seasons = [],
+                studios = [],
+                genres = [],
+                source = [],
+                themes = [],
+                demographics = [],
+                group_by = []):
+    with session:
+        #print('filtering data')
+        if joined_tables == None:
+            joined_tables, session = get_full_table(session= session, group_by=group_by)
+
+        #print('filtering year')
+        filtered_table = joined_tables.where(AniChart.year >= start_year) \
+                                    .where(AniChart.year <= end_year)
+        #print('filtering title')
+        if title != '':
+            filtered_table = filtered_table.where(sa.or_(
+                MyAnimeList.title.like('%'+title+'%'),
+                MyAnimeList.subtitle.like('%'+title+'%')
+            ))
+        #print('filtering seasons')
+        if len(seasons) !=0:
+            filtered_table = filtered_table.where(AniChart.season.in_(seasons))
+
+        #print('filtering studios')        
+        if len(studios) !=0:
+            filtered_table = filtered_table.where(MyAnimeList.studios.in_(studios))
+        
+        #print('filtering genres')                
+        if len(genres) != 0:
+            if 'None' in genres:
+                filtered_table = filtered_table.where(
+                    sa.or_(
+                        MyAnimeList.genres.in_(genres), 
+                        MyAnimeList.genres ==None
+                    )
+                )
+            else:
+                filtered_table = filtered_table.where(MyAnimeList.genres.in_(genres))
+
+        #print('filtering sources')        
+        if len(source) != 0:
+            if 'None' in source:
+                filtered_table = filtered_table.where(
+                    sa.or_(
+                        MyAnimeList.source.in_(source), 
+                        MyAnimeList.source ==None
+                    )
+                )
+            else:
+                filtered_table = filtered_table.where(MyAnimeList.source.in_(source))
+
+        #print('filtering themes')        
+        if len(themes) != 0:
+            if 'None' in themes:
+                filtered_table = filtered_table.where(
+                    sa.or_(
+                        MyAnimeList.themes.in_(themes), 
+                        MyAnimeList.themes ==None
+                    )
+                )
+            else:
+                filtered_table = filtered_table.where(MyAnimeList.themes.in_(themes))
+
+        #print('filtering demographics')        
+        if len(demographics) != 0:
+            if 'None' in demographics:
+                filtered_table = filtered_table.where(
+                    sa.or_(
+                        MyAnimeList.demographics.in_(demographics), 
+                        MyAnimeList.demographics ==None
+                    )
+                )
+            else:
+                filtered_table = filtered_table.where(MyAnimeList.demographics.in_(demographics))
+
+    #print('done filtering data')
+    return filtered_table, session
+
+def group_table(table, groupby=[]):
+    if table == None:
+        return
     
-    if len(seasons) !=0:
-        filtered_table = filtered_table.where(AniChart.season.in_(seasons))
+    if groupby==[]:
+        return table
     
-    if len(studios) !=0:
-        filtered_table = filtered_table.where(MyAnimeList.studios.in_(studios))
+    return table.group_by(*groupby)
+
+def execute_table(table, session = default_session):
+    if table != None:
+        table = session.execute(table)
+    return table, session
     
-    if len(genres) != 0:
-        if "None" in genres:
-            filtered_table = filtered_table.where(
-                sa.or_(
-                    MyAnimeList.genres.in_(genres), 
-                    MyAnimeList.genres ==None
-                )
-            )
-        else:
-            filtered_table = filtered_table.where(MyAnimeList.genres.in_(genres))
-
-    if len(source) != 0:
-        if "None" in source:
-            filtered_table = filtered_table.where(
-                sa.or_(
-                    MyAnimeList.source.in_(source), 
-                    MyAnimeList.source ==None
-                )
-            )
-        else:
-            filtered_table = filtered_table.where(MyAnimeList.source.in_(source))
-
-    if len(themes) != 0:
-        if "None" in themes:
-            filtered_table = filtered_table.where(
-                sa.or_(
-                    MyAnimeList.themes.in_(themes), 
-                    MyAnimeList.themes ==None
-                )
-            )
-        else:
-            filtered_table = filtered_table.where(MyAnimeList.themes.in_(themes))
-
-    if len(demographics) != 0:
-        if "None" in demographics:
-            filtered_table = filtered_table.where(
-                sa.or_(
-                    MyAnimeList.demographics.in_(demographics), 
-                    MyAnimeList.demographics ==None
-                )
-            )
-        else:
-            filtered_table = filtered_table.where(MyAnimeList.demographics.in_(demographics))
-
-    filtered_table = session.execute(filtered_table)
-
-    df = pd.DataFrame(filtered_table,dtype=object)
-    df.fillna("None", inplace=True)
-
-    return df
-
 
 # def main():
-#     #session = create_database()
-#     print(read_data())
+#     session = create_database()
+#     # print(pd.DataFrame(read_data()))
 
 # main()
