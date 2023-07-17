@@ -6,6 +6,15 @@ import plotly.express as px
 
 
 def get_data():
+    """
+    Creates session states for the following:
+    joined tables (SQLAlchemy select statement), 
+    data_table (SQLAlchemy select statement),
+    full_data (Pandas Dataframe)
+
+    Then fills all NaN values in the dataframe with the string 'None'.
+    """
+
     # print('\n\n\n\n\ngetting full table')
     # start_time = time.time()
     st.session_state.joined_tables, st.session_state.sql_session = get_full_table()
@@ -17,17 +26,21 @@ def get_data():
     st.session_state.data_table, st.session_state.sql_session = read_data(
         joined_tables=st.session_state.joined_tables, 
         session=st.session_state.sql_session)
+    
     st.session_state.full_data, st.session_state.sql_session = execute_table(
         st.session_state.data_table,
         st.session_state.sql_session)
+    
     # end_time = time.time()
     # print(f'time: {end_time-start_time}')
 
     # start_time = time.time()
     # print('making dataframe')
+
     st.session_state.full_data = pd.DataFrame(
         st.session_state.full_data,
         dtype=object)
+    
     # end_time = time.time()
     # print(f'time: {end_time-start_time}')
 
@@ -39,6 +52,11 @@ def get_data():
 
 
 def create_filters():
+    """
+    Reads through the session state in the full_data and creates filters for each unique value
+    that can be used to filter the full table to create the chart and data table.
+    """
+
     st.session_state.year = st.slider('Year', min_value= 2006, max_value=2022, value=[2006,2022])
     st.session_state.columns = {}
     st.session_state.ignore_columns = ['year', 'title', 'subtitle']
@@ -55,6 +73,13 @@ def create_filters():
     # print(f'time: {end_time-start_time}')
 
 def display_data():
+    """
+    Creates a chart and a data table using the filters set in the FilterForm.
+
+    Chart has the same data as the data table, but groups the data by year, 
+    season, and title to prevent double counting titles.
+    """
+
     # start_time = time.time()
     # print("getting filtered data")
     st.session_state.filtered_table, st.session_state.sql_session = filter_data(
@@ -139,12 +164,19 @@ def display_data():
                 case 0:
                     st.write('No results found')
                 case 1:
-                    fig = px.scatter(st.session_state.line_chart)
+                    fig = px.scatter(st.session_state.line_chart, title = 'Number of titles')
                 case _:
-                    fig = px.line(st.session_state.line_chart)
-            
+                    fig = px.line(st.session_state.line_chart, title='Number of Titles')
+
             if fig !=None:
-                st.plotly_chart(fig)
+                fig.update_layout(
+                    autosize = True,
+                    title = 'Number of Anime Released',
+                    xaxis_title = 'Year - Season',
+                    yaxis_title = 'Number of Titles',
+                    showlegend = False
+                )
+                st.plotly_chart(fig,use_container_width=True)
             # end_time = time.time()
             # print(f'time: {end_time-start_time}')
 
@@ -155,7 +187,7 @@ def display_data():
             # end_time = time.time()
             # print(f'time: {end_time-start_time}')
 
-with st.form("test"):
+with st.form("FilterForm"):
     try:
         data = st.session_state.full_data
     except Exception as e:

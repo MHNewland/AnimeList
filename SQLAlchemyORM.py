@@ -12,45 +12,44 @@ default_session = sao.Session(engine:=sa.create_engine('sqlite:///database.db', 
 class Base(sao.DeclarativeBase):
     pass
 
-#Need to rewrite the AniChart.json/playwrightAniChart.py
-'''
-AniChart json is formatted as 
-[
-    {
-        'year': int,
-        'season': str,
-        'title': str
-    }
-]
-'''
 class AniChart(Base):
+    """
+    AniChart json is formatted as 
+    [
+        {
+            'year': int,
+            'season': str,
+            'title': str
+        }
+    ]
+    """    
     __tablename__ = 'AniChart'
 
     id: sao.Mapped[int] = sao.mapped_column(primary_key=True)
     year: sao.Mapped[int] =sao.mapped_column(sa.SmallInteger())
     season: sao.Mapped[str] =sao.mapped_column(sa.String(6))
     title: sao.Mapped[str] =sao.mapped_column(sa.String(150), sa.ForeignKey('MyAnimeList.title'))
-    #MyAnimeList: sao.Mapped['MyAnimeList'] = sao.relationship(back_populates='title')
 
     def __repr__(self) -> str:
         return f'AniChart(id={self.id!r}, year={self.year!r}, season={self.season}, title={self.title})'
 
-
-'''
- MyAnimeList json is formatted as 
-[
-    {
-        'title': 'str',
-        'subtitle': str/null,
-        'genres': list[str]/null,
-        'studios': list[str]/null,
-        'source': list[str]/null,
-        'themes': list[str]/null,
-        'demographics': list[str]/null
-    }
-]
- '''   
+   
 class MyAnimeList(Base):
+    """ 
+    MyAnimeList json is formatted as 
+    [
+        {
+            'title': 'str',
+            'subtitle': str/null,
+            'genres': list[str]/null,
+            'studios': list[str]/null,
+            'source': list[str]/null,
+            'themes': list[str]/null,
+            'demographics': list[str]/null
+        }
+    ]
+    """
+
     __tablename__ = 'MyAnimeList'
 
     id: sao.Mapped[int] =sao.mapped_column(primary_key=True)
@@ -61,7 +60,6 @@ class MyAnimeList(Base):
     source: sao.Mapped[str] =sao.mapped_column(sa.String(10))
     themes: sao.Mapped[Optional[str]] = sao.mapped_column(sa.String(15))
     demographics: sao.Mapped[Optional[str]] = sao.mapped_column(sa.String(15))
-    #AniChart: sao.Mapped['AniChart'] = sao.relationship(back_populates='title')
 
     def __repr__(self) -> str:
         returnstr = (
@@ -78,6 +76,11 @@ class MyAnimeList(Base):
 
 
 def create_database():
+    """
+    Reads AniChart.json and MyAnimeList.json and creates
+    SQLAlchemyORM objects, saving them to a local database.
+    """
+
     try:
         engine = sa.create_engine('sqlite:///database.db', echo=False)
     except Exception as e:
@@ -101,7 +104,7 @@ def create_database():
                         value = [value]
 
                     # figure out how many copies of each row we need to make to update all of
-                    # them with the values so that given
+                    # then with the values so that given
                     # {key1: {
                     #   sub_key1: {
                     #       value1,
@@ -217,8 +220,40 @@ def create_database():
 
 
 def get_full_table(session = default_session):
-    with session:
+    """
+    Creates the select statement to make a joined table between 
+    AniChart and MyAnimeList objects.
 
+    If no session was passed, it uses the default session using
+    the local database.
+
+    Due to the differences in how AniChart and MyAnimeLists handle
+    naming seasons of shows, the titles in MyAnimeList are stripped 
+    of saying "season"
+
+    If the title ends in 'nd season', 'rd season', or 'th season', 
+    and the previous character is a digit, it strips everything after
+    3 characters before the last instance of the word 'season' so 
+    that it grabs everything after the digit. The reason it checks 
+    for the character at -10 is to prevent it from breaking titles
+    that end with the word instead of the digit, such as 'second 
+    season'.
+    
+    Parameters
+    ----------
+    session : SQLAlchemyORM Session
+            The active SQLAlchemyORM Session object
+            default: sa.create_engine('sqlite:///database.db', echo=False)
+
+    Returns
+    ----------
+        SQLAlchemy Select statement:
+            Select statment to create or group a table to be manipulated later      
+        SQLAlchemyORM Session:
+            The active session to preserve data continuity.
+    """
+
+    with session:
         for obj in session.scalars(sa.select(MyAnimeList)):
             title = obj.title
         
@@ -227,11 +262,11 @@ def get_full_table(session = default_session):
                 title[-9:].casefold() == 'th season') and \
                 title[-10].isnumeric():
                 
-                season_index = title.casefold().index('season')-3                                   
+                season_index = title.casefold().rfind('season')-3                                   
                 obj.title = title[:season_index]
 
             if title[-9:-1].casefold() == 'season ' and title[-1].isnumeric():
-                season_index = title.casefold().index('season')
+                season_index = title.casefold().rfind('season')
                 obj.title = title[:season_index] + title[season_index+6:]
                 
                
@@ -255,10 +290,42 @@ def get_full_table(session = default_session):
 def read_data(session = default_session,
               group_by=[],
               joined_tables=None):
-    
+    """
+    Groups a given table by the values listed in group_by 
+    using the session passed.
+
+    If no session was passed, it uses the default session using
+    the local database.
+
+    Creates the joined table if no table is supplied.
+
+    Parameters
+    ----------
+        session : SQLAlchemyORM Session
+            The active SQLAlchemyORM Session object
+            default: sa.create_engine('sqlite:///database.db', echo=False)
+
+        group_by : list
+            The list of column names as strings to group by.
+            If no list is given, it leaves the table alone
+
+        joined_tables : SQLAlchemy Select statement 
+            The current SQLAlchemy Select statement for building
+            the table wanted.
+            If no table was passed, it creates the default table in
+            get_full_table()
+        
+    Returns
+    ----------
+        SQLAlchemy Select statement:
+            Select statment to create or group a table to be manipulated later      
+        SQLAlchemyORM Session:
+            The active session to preserve data continuity.
+    """
+
     #print('reading data')
     with session:
-        if joined_tables== None:
+        if joined_tables == None:
             joined_tables, session = get_full_table(session=session)
 
         joined_tables = group_table(joined_tables, group_by)
@@ -278,6 +345,58 @@ def filter_data(session= default_session,
                 themes = [],
                 demographics = [],
                 group_by = []):
+    """
+    Creates a SQLAlchemy Select statement with all filters applied using 
+    SQLAlchemyORM where functions. All list parameters are treated as an OR.
+
+    Parameters
+    ----------
+        session : SQLAlchemyORM Session
+            The active SQLAlchemyORM Session object
+            default: sa.create_engine('sqlite:///database.db', echo=False)
+
+        joined_tables : SQLAlchemy Select statment
+            Table that is to be filtered
+
+        start_year : int
+            Lower bound for the years the anime released (inclusive) 
+
+        end_year : int
+            Upper bound for the years the anime released (inclusive) 
+        
+        title : str
+            String to filter either the title or subtitle with using 'like'
+            
+        seasons : list[str]
+            String relating to time of year the anime released.
+
+        studios : list[str]
+            The name of the studio that created the anime.
+
+        genres : list[str]
+            The genres of the anime.
+            
+        source : list[str]
+            The source of the anime (e.g. 'Manga').
+
+        themes : list[str]
+            The theme of the anime.
+
+        demographics : list[str]
+            Who the intended audience for the anime was in Japanese terms.
+
+        group_by : list[str]
+            List of columns to group values from.
+
+    Returns
+    ----------
+        SQLAlchemy Select statement:
+            Select statment for a table with the filters applieid in 'where' clauses
+            to be manipulated later.
+        SQLAlchemyORM Session:
+            The active session to preserve data continuity.
+    """
+
     with session:
         #print('filtering data')
         if joined_tables == None:
@@ -352,6 +471,27 @@ def filter_data(session= default_session,
     return filtered_table, session
 
 def group_table(table, groupby=[]):
+    """
+    Groups the provided table by the columns specified. 
+    If no table is specified, it returns 'None'.
+    If no groupby is provided, it returns the table.
+
+    Parameters
+    ----------
+        table : SQLAlchemy Select statement
+            The select statement to add the group_by method to.
+
+        group_by : list[str]
+            List of columns to group values from.
+        
+    Returns
+    ----------
+        SQLAlchemy Select statement:
+            Select statment for a table with the filters applieid in 'where' clauses
+            to be manipulated later.
+        SQLAlchemyORM Session:
+            The active session to preserve data continuity.    
+    """
     if table == None:
         return
     
@@ -361,6 +501,26 @@ def group_table(table, groupby=[]):
     return table.group_by(*groupby)
 
 def execute_table(table, session = default_session):
+    """
+    Executes the select statement in 'table' to create a Result.
+
+    Parameters
+    ----------
+        table : SQLAlchemy Select statement
+            The select statement to add the group_by method to.
+
+        session : SQLAlchemyORM Session
+            The active SQLAlchemyORM Session object
+            default: sa.create_engine('sqlite:///database.db', echo=False)
+        
+    Returns
+    ----------
+        Result[_T@execute]:
+            The result of the executed table
+        SQLAlchemyORM Session:
+            The active session to preserve data continuity.    
+    """
+
     if table != None:
         table = session.execute(table)
     return table, session
