@@ -94,13 +94,13 @@ By using the filters and the corresposnding plotly charts, any number of analyse
 
 Example 1:
 
-![alt text](https://github.com/MHNewland/AnimeList/blob/main/anime-spring.png?raw=true)
+![alt text](https://github.com/MHNewland/AnimeList/blob/main/Spring-anime.png?raw=true)
 
-![alt text](https://github.com/MHNewland/AnimeList/blob/main/anime-summer.png?raw=true)
+![alt text](https://github.com/MHNewland/AnimeList/blob/main/Summer-anime.png?raw=true)
 
-![alt text](https://github.com/MHNewland/AnimeList/blob/main/anime-fall.png?raw=true)
+![alt text](https://github.com/MHNewland/AnimeList/blob/main/Fall-anime.png?raw=true)
 
-![alt text](https://github.com/MHNewland/AnimeList/blob/main/anime-winter.png?raw=true)
+![alt text](https://github.com/MHNewland/AnimeList/blob/main/Winter-anime.png?raw=true)
 
 Using the images above, we can see that springtime is generally when new titles are released.
 
