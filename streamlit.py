@@ -164,14 +164,27 @@ def display_data():
                 case 0:
                     st.write('No results found')
                 case 1:
-                    fig = px.scatter(st.session_state.line_chart, title = 'Number of titles')
+                    fig = px.scatter(st.session_state.line_chart, title = 'Number of Titles')
                 case _:
                     fig = px.line(st.session_state.line_chart, title='Number of Titles')
 
             if fig !=None:
+                filter_str = ''
+                
+                for col in st.session_state.columns:
+                    if col == 'title':
+                        if st.session_state.columns[col] != '':
+                            filter_str = filter_str + (f'{col}: {st.session_state.columns[col]}\t')  
+
+                    elif st.session_state.columns[col] != []:
+                        filter_str = filter_str + (f'{col}: {st.session_state.columns[col]}\t')
+
+                if filter_str != '':
+                    filter_str = 'Filters:<br>' + filter_str
+                
                 fig.update_layout(
                     autosize = True,
-                    title = 'Number of Anime Released',
+                    title = f'Number of Anime Released<br><sup>{filter_str}</sup>',
                     xaxis_title = 'Year - Season',
                     yaxis_title = 'Number of Titles',
                     showlegend = False
