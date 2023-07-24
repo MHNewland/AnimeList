@@ -14,6 +14,18 @@ No packages are needed as this is hosted on streamlit's website, but these are t
 - playwright==1.33.0
 - plotly==5.15.0
 
+To run the app locally, do the following:
+- navigate to the folder containing the project within command prompt or powershell
+- install the requirements by running
+```
+pip install -r requirements.txt
+```
+then run
+```
+streamlit run streamlit.py
+```
+from within the same folder. This will launch a browser with the app running on it.
+
 # Features
 ## Creating the data
 The data for this application was created by using the playwrite scripts to scrape data off of their respective sites. 
@@ -65,6 +77,8 @@ The format of the json is laid out as follows:
 ```
 
 ## Database creation
+Althought it would have been easier to scrape the data directly into a pandas dataframe, I decided to use SQLAlchemy's ORM features so that I could learn more about it.
+
 In SQLAlchemyORM.py the create_database() function reads through each of the json files and added each value for each title into a database. 
 
 Anichart was easy to add as it only had 3 columns and each had a single value.
